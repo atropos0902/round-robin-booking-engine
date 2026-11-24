@@ -1,0 +1,39 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-paper: #f7f6f2;
+  --color-ink: #1c2420;
+  --color-muted: #5f6a64;
+  --color-line: #dcd9cf;
+  --color-pine: #17594a;
+  --color-pine-dark: #0f4337;
+  --color-pine-soft: #e2eee9;
+  --color-brick: #a2391f;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, 'Segoe UI', 'Helvetica Neue', sans-serif;
+}
+
+@layer base {
+  body {
+    @apply bg-paper text-ink antialiased;
+  }
+  button:not(:disabled),
+  select {
+    cursor: pointer;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-pine);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .field {
+    @apply w-full rounded-md border border-line bg-white px-3 py-2 text-sm;
+  }
+  .primary {
+    @apply rounded-md border border-transparent bg-pine px-4 py-2 text-sm font-medium text-white hover:bg-pine-dark disabled:opacity-50;
+  }
+  .quiet {
+    @apply rounded-md border border-line bg-white px-3 py-1.5 text-sm hover:border-pine disabled:opacity-40;
+  }
+}

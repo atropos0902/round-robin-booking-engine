@@ -1,0 +1,22 @@
+{
+  "name": "@rr/workers",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-eventbridge": "3.883.0",
+    "@aws-sdk/client-secrets-manager": "3.883.0",
+    "@aws-sdk/client-sesv2": "3.883.0",
+    "@aws-sdk/client-sqs": "3.883.0",
+    "@rr/core": "*",
+    "@sentry/aws-serverless": "10.10.0",
+    "zod": "4.1.5"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "8.10.152",
+    "aws-sdk-client-mock": "4.1.0"
+  }
+}

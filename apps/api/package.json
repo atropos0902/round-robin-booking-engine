@@ -1,0 +1,28 @@
+{
+  "name": "@rr/api",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@nestjs/common": "11.1.6",
+    "@nestjs/core": "11.1.6",
+    "@nestjs/platform-express": "11.1.6",
+    "@rr/core": "*",
+    "@rr/domain": "*",
+    "@sentry/nestjs": "10.10.0",
+    "@vercel/functions": "3.0.0",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2",
+    "zod": "4.1.5"
+  },
+  "devDependencies": {
+    "@nestjs/testing": "11.1.6",
+    "@types/express": "5.0.3",
+    "@types/supertest": "6.0.3",
+    "supertest": "7.1.4"
+  }
+}
