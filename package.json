@@ -1,0 +1,33 @@
+{
+  "name": "round-robin-booking-engine",
+  "private": true,
+  "engines": { "node": "22.x" },
+  "workspaces": ["packages/*", "apps/*", "infra", "checks"],
+  "scripts": {
+    "build:packages": "npm run build -w @rr/domain && npm run db:generate && npm run build -w @rr/core",
+    "build": "npm run build:packages && npm run build -w @rr/api && npm run build -w @rr/web && npm run build -w @rr/workers",
+    "typecheck": "npm run build:packages && npm run typecheck --workspaces --if-present",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "db:generate": "prisma generate --schema packages/core/prisma/schema.prisma",
+    "db:migrate": "prisma migrate deploy --schema packages/core/prisma/schema.prisma",
+    "db:seed": "tsx packages/core/prisma/seed.ts",
+    "check:migrations": "node scripts/check-migrations.mjs",
+    "replay-dlq": "tsx apps/workers/src/replay-dlq.ts",
+    "outbox:status": "tsx apps/workers/src/outbox-status.ts",
+    "dev:web": "npm run dev -w @rr/web",
+    "dev:api": "npm run build -w @rr/api && npm run start -w @rr/api",
+    "dev:workers": "tsx apps/workers/src/local.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.35.0",
+    "@types/node": "22.18.1",
+    "eslint": "9.35.0",
+    "fast-check": "4.3.0",
+    "prisma": "6.15.0",
+    "tsx": "4.20.5",
+    "typescript": "5.9.2",
+    "typescript-eslint": "8.42.0",
+    "vitest": "3.2.4"
+  }
+}
