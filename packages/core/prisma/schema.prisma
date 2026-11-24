@@ -1,0 +1,169 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum BookingStatus {
+  CONFIRMED
+  CANCELLED
+}
+
+model Host {
+  id          String           @id @default(uuid()) @db.Uuid
+  name        String
+  email       String           @unique
+  timeZone    String           @map("time_zone")
+  /// CalDAV collection that receives this host's meetings.
+  calendarUrl String?          @map("calendar_url")
+  hours       WorkingHours[]
+  overrides   DateOverride[]
+  busyBlocks  BusyBlock[]
+  memberships RotationMember[]
+  bookings    Booking[]
+
+  @@map("host")
+}
+
+model WorkingHours {
+  id          String @id @default(uuid()) @db.Uuid
+  hostId      String @map("host_id") @db.Uuid
+  /// 1 is Monday, 7 is Sunday.
+  weekday     Int    @db.SmallInt
+  startMinute Int    @map("start_minute") @db.SmallInt
+  endMinute   Int    @map("end_minute") @db.SmallInt
+  host        Host   @relation(fields: [hostId], references: [id], onDelete: Cascade)
+
+  @@index([hostId])
+  @@map("working_hours")
+}
+
+model DateOverride {
+  hostId    String   @map("host_id") @db.Uuid
+  localDate DateTime @map("local_date") @db.Date
+  /// [{ startMinute, endMinute }], empty for a day off.
+  windows   Json
+  host      Host     @relation(fields: [hostId], references: [id], onDelete: Cascade)
+
+  @@id([hostId, localDate])
+  @@map("date_override")
+}
+
+model BusyBlock {
+  id     String   @id @default(uuid()) @db.Uuid
+  hostId String   @map("host_id") @db.Uuid
+  source String
+  from   DateTime @map("from_at") @db.Timestamptz(3)
+  to     DateTime @map("to_at") @db.Timestamptz(3)
+  host   Host     @relation(fields: [hostId], references: [id], onDelete: Cascade)
+
+  @@index([hostId, from])
+  @@map("busy_block")
+}
+
+model EventType {
+  id                   String           @id @default(uuid()) @db.Uuid
+  slug                 String           @unique
+  title                String
+  durationMinutes      Int              @map("duration_minutes")
+  slotStepMinutes      Int              @map("slot_step_minutes")
+  bufferBeforeMinutes  Int              @default(0) @map("buffer_before_minutes")
+  bufferAfterMinutes   Int              @default(0) @map("buffer_after_minutes")
+  minimumNoticeMinutes Int              @default(0) @map("minimum_notice_minutes")
+  horizonDays          Int              @default(60) @map("horizon_days")
+  dailyCapPerHost      Int?             @map("daily_cap_per_host")
+  /// Used by the release check. Nobody is mailed and nothing reaches a calendar.
+  synthetic            Boolean          @default(false)
+  members              RotationMember[]
+  bookings             Booking[]
+
+  @@map("event_type")
+}
+
+model RotationMember {
+  eventTypeId    String    @map("event_type_id") @db.Uuid
+  hostId         String    @map("host_id") @db.Uuid
+  weight         Int       @default(1)
+  priority       Int       @default(0)
+  active         Boolean   @default(true)
+  /// Millionths of a turn, see TURN in the domain package.
+  balance        Int       @default(0)
+  lastAssignedAt DateTime? @map("last_assigned_at") @db.Timestamptz(3)
+  eventType      EventType @relation(fields: [eventTypeId], references: [id], onDelete: Cascade)
+  host           Host      @relation(fields: [hostId], references: [id], onDelete: Cascade)
+
+  @@id([eventTypeId, hostId])
+  @@map("rotation_member")
+}
+
+/// The migration adds an exclusion constraint Prisma cannot express, booking_no_overlap.
+model Booking {
+  id             String              @id @default(uuid()) @db.Uuid
+  eventTypeId    String              @map("event_type_id") @db.Uuid
+  hostId         String              @map("host_id") @db.Uuid
+  status         BookingStatus       @default(CONFIRMED)
+  start          DateTime            @map("start_at") @db.Timestamptz(3)
+  end            DateTime            @map("end_at") @db.Timestamptz(3)
+  blockedFrom    DateTime            @map("blocked_from") @db.Timestamptz(3)
+  blockedTo      DateTime            @map("blocked_to") @db.Timestamptz(3)
+  inviteeName    String              @map("invitee_name")
+  inviteeEmail   String              @map("invitee_email")
+  inviteeZone    String              @map("invitee_zone")
+  manageToken    String              @unique @default(uuid()) @map("manage_token") @db.Uuid
+  idempotencyKey String?             @unique @map("idempotency_key")
+  createdAt      DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  eventType      EventType           @relation(fields: [eventTypeId], references: [id])
+  host           Host                @relation(fields: [hostId], references: [id])
+  decision       AssignmentDecision?
+
+  @@index([hostId, start])
+  @@map("booking")
+}
+
+model AssignmentDecision {
+  bookingId String  @id @map("booking_id") @db.Uuid
+  decision  Json
+  attempts  Int
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@map("assignment_decision")
+}
+
+model OutboxEvent {
+  id           String    @id @default(uuid()) @db.Uuid
+  seq          BigInt    @default(autoincrement())
+  type         String
+  version      Int
+  aggregateId  String    @map("aggregate_id") @db.Uuid
+  payload      Json
+  occurredAt   DateTime  @map("occurred_at") @db.Timestamptz(3)
+  claimedUntil DateTime? @map("claimed_until") @db.Timestamptz(3)
+  attempts     Int       @default(0)
+  publishedAt  DateTime? @map("published_at") @db.Timestamptz(3)
+
+  @@map("outbox_event")
+}
+
+/// What each consumer has already handled.
+model InboxEntry {
+  consumer   String
+  eventId    String   @map("event_id") @db.Uuid
+  done       Boolean  @default(false)
+  leaseUntil DateTime @map("lease_until") @db.Timestamptz(3)
+
+  @@id([consumer, eventId])
+  @@map("inbox_entry")
+}
+
+model WebhookSubscription {
+  id     String  @id @default(uuid()) @db.Uuid
+  url    String
+  secret String
+  active Boolean @default(true)
+
+  @@map("webhook_subscription")
+}
