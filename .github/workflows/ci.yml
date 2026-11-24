@@ -1,0 +1,57 @@
+name: CI
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17.6-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: rr_test
+        ports: ['55432:5432']
+        options: --health-cmd pg_isready --health-interval 2s --health-retries 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: docker compose up -d sqs
+      - run: npm ci
+        env: { PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1' }
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run check:migrations
+      - run: npm test
+      - run: npm run build -w @rr/web
+        env: { DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:55432/rr_test }
+      - run: npm run synth -w @rr/infra
+
+  risk:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - id: risk
+        run: node scripts/pr-risk.mjs
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+      - if: always() && steps.risk.outputs.high == 'true'
+        run: gh pr edit "$PR" --add-label high-risk
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.html_url }}

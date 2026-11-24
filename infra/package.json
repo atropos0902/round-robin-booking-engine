@@ -1,0 +1,8 @@
+{
+  "name": "@rr/infra",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": { "synth": "cdk synth --quiet", "deploy": "cdk deploy", "typecheck": "tsc -p tsconfig.json --noEmit" },
+  "dependencies": { "aws-cdk-lib": "2.214.0", "constructs": "10.4.2" },
+  "devDependencies": { "aws-cdk": "2.1029.0", "esbuild": "0.25.9" }
+}

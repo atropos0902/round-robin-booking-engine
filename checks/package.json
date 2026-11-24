@@ -1,0 +1,12 @@
+{
+  "name": "@rr/checks",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "local": "playwright test",
+    "test": "checkly test",
+    "deploy": "checkly deploy --force"
+  },
+  "devDependencies": { "@playwright/test": "1.55.0", "checkly": "6.5.0" }
+}

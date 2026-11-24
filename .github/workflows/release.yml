@@ -1,0 +1,69 @@
+name: Daily release
+on:
+  schedule:
+    - cron: '0 9 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency: release
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    environment: production
+    env:
+      RELEASE: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+        env: { PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1' }
+      - run: npm run build:packages
+
+      # The schema goes first. It only ever adds to what the running code knows.
+      - run: npm run db:migrate
+        env: { DATABASE_URL: '${{ secrets.DATABASE_DIRECT_URL }}' }
+
+      - run: >-
+          npm run deploy -w @rr/infra -- --require-approval never
+          -c stage=production -c release=$RELEASE
+          -c appUrl=${{ vars.APP_URL }} -c incidentUrl=${{ secrets.INCIDENT_CLOUDWATCH_URL }}
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      # Deploy hooks return before the build is done, so wait until both report this release.
+      - run: |
+          curl -fsS -X POST "$API_HOOK"
+          curl -fsS -X POST "$WEB_HOOK"
+          for url in "$API_URL/healthz" "$APP_URL/api/release"; do
+            for i in $(seq 60); do
+              curl -fsS "$url" | grep -q "$RELEASE" && break
+              [ "$i" = 60 ] && exit 1
+              sleep 10
+            done
+          done
+        env:
+          API_HOOK: ${{ secrets.VERCEL_API_DEPLOY_HOOK }}
+          WEB_HOOK: ${{ secrets.VERCEL_WEB_DEPLOY_HOOK }}
+          API_URL: ${{ vars.API_URL }}
+          APP_URL: ${{ vars.APP_URL }}
+
+      - id: check
+        run: npx checkly test --record -e ENVIRONMENT_URL=${{ vars.APP_URL }} -e API_URL=${{ vars.API_URL }}
+        working-directory: checks
+        env:
+          CHECKLY_API_KEY: ${{ secrets.CHECKLY_API_KEY }}
+          CHECKLY_ACCOUNT_ID: ${{ secrets.CHECKLY_ACCOUNT_ID }}
+          INCIDENT_ALERT_SOURCE_ID: ${{ secrets.INCIDENT_ALERT_SOURCE_ID }}
+
+      - if: failure() && steps.check.outcome == 'failure'
+        run: node scripts/open-incident.mjs
+        env:
+          INCIDENT_ALERT_SOURCE_ID: ${{ secrets.INCIDENT_ALERT_SOURCE_ID }}
+          INCIDENT_ALERT_TOKEN: ${{ secrets.INCIDENT_ALERT_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
